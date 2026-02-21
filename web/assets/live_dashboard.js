@@ -1,7 +1,8 @@
 (() => {
   const CONFIG = {
     wsUrl: "wss://advanced-trade-ws.coinbase.com",
-    productId: "SOL-USD",
+    products: ["SOL-USD", "BTC-USD"],
+    defaultProduct: "SOL-USD",
     candleMs: 5000,
     maxCandles: 90,
     bootstrapLimit: 240,
@@ -10,6 +11,8 @@
 
   class LiveDashboard {
     constructor() {
+      this.titleEl = document.getElementById("app-title");
+      this.marketToggleEl = document.getElementById("market-toggle");
       this.statusEl = document.getElementById("status");
       this.sourceEl = document.getElementById("source");
       this.priceEl = document.getElementById("price");
@@ -28,58 +31,126 @@
       this.bidsTableEl = document.getElementById("bids-table");
       this.asksTableEl = document.getElementById("asks-table");
 
-      this.candles = [];
-      this.tickTimes = [];
-      this.basePrice = null;
+      this.activeProduct = CONFIG.defaultProduct;
       this.reconnectMs = 1000;
-      this.bids = new Map();
-      this.asks = new Map();
-      this.lastBookHydrateMs = 0;
-      this.bookHydratePending = false;
+      this.wsConnected = false;
+
+      this.marketState = new Map(
+        CONFIG.products.map((product) => [product, this.createEmptyState()]),
+      );
+
+      this.renderMarketToggle();
+    }
+
+    createEmptyState() {
+      return {
+        candles: [],
+        tickTimes: [],
+        basePrice: null,
+        lastPrice: null,
+        lastUpdateTs: null,
+        bids: new Map(),
+        asks: new Map(),
+        lastBookHydrateMs: 0,
+        bookHydratePending: false,
+        historySource: "unknown",
+      };
+    }
+
+    getState(product = this.activeProduct) {
+      if (!this.marketState.has(product)) {
+        this.marketState.set(product, this.createEmptyState());
+      }
+      return this.marketState.get(product);
     }
 
     async start() {
-      await this.bootstrapHistory();
+      this.setStatus("Loading historical context...");
+      await Promise.all(CONFIG.products.map((product) => this.bootstrapHistory(product)));
       this.connectWs();
+      this.setActiveProduct(this.activeProduct);
     }
 
-    async bootstrapHistory() {
-      this.setStatus("Loading historical context...");
+    renderMarketToggle() {
+      this.marketToggleEl.textContent = "";
+      for (const product of CONFIG.products) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = `market-btn${product === this.activeProduct ? " active" : ""}`;
+        btn.dataset.product = product;
+        btn.textContent = product;
+        btn.addEventListener("click", () => this.setActiveProduct(product));
+        this.marketToggleEl.appendChild(btn);
+      }
+    }
+
+    setActiveProduct(product) {
+      if (!CONFIG.products.includes(product)) return;
+      this.activeProduct = product;
+
+      const buttons = this.marketToggleEl.querySelectorAll(".market-btn");
+      for (const btn of buttons) {
+        btn.classList.toggle("active", btn.dataset.product === product);
+      }
+
+      this.titleEl.textContent = `${product} Live Terminal`;
+      this.chart.setAttribute("aria-label", `${product} live candlestick chart`);
+      this.refreshDisplay();
+    }
+
+    refreshDisplay() {
+      const state = this.getState();
+      if (state.lastPrice !== null) {
+        this.priceEl.textContent = `$${this.fmtPrice(state.lastPrice)}`;
+        this.updateChange(state.lastPrice);
+      } else {
+        this.priceEl.textContent = "--";
+        this.changeEl.textContent = "--";
+        this.changeEl.className = "chg flat";
+      }
+
+      this.updateStats();
+      this.tpmEl.textContent = String(state.tickTimes.length);
+      this.render();
+      this.renderOrderBook();
+
+      if (state.lastUpdateTs) {
+        this.clockEl.textContent = `Updated ${new Date(state.lastUpdateTs).toLocaleTimeString()}`;
+      }
+
+      const streamState = this.wsConnected ? "Coinbase market_trades + level2" : "connecting...";
+      this.sourceEl.textContent = `Source: ${state.historySource}. Live stream: ${streamState}.`;
+      this.obStatusEl.textContent = this.wsConnected ? "Live" : "Connecting...";
+      this.setStatus(this.wsConnected ? `Live: ${this.activeProduct} connected` : `Loading ${this.activeProduct}...`);
+    }
+
+    async bootstrapHistory(product) {
       try {
         const q = new URLSearchParams({
-          product: CONFIG.productId,
+          product,
           limit: String(CONFIG.bootstrapLimit),
           min_local: "20",
         });
         const resp = await fetch(`/api/bootstrap?${q.toString()}`, { cache: "no-store" });
-        if (!resp.ok) {
-          this.setStatus("Bootstrap unavailable; switching to live only");
-          return;
-        }
+        if (!resp.ok) return;
+
         const payload = await resp.json();
         const source = payload.source || "unknown";
         const rows = Array.isArray(payload.candles) ? payload.candles : [];
+        const candles = rows.map((row) => this.parseHistoryRow(row)).filter((row) => row !== null);
+        const state = this.getState(product);
 
-        this.candles = rows.map((row) => this.parseHistoryRow(row)).filter((row) => row !== null);
-        if (this.candles.length > CONFIG.maxCandles) {
-          this.candles = this.candles.slice(-CONFIG.maxCandles);
+        state.candles = candles.slice(-CONFIG.maxCandles);
+        state.historySource = source;
+
+        if (state.candles.length > 0) {
+          const last = state.candles[state.candles.length - 1];
+          state.basePrice = last.close;
+          state.lastPrice = last.close;
+          state.lastUpdateTs = Date.now();
         }
-
-        if (this.candles.length > 0) {
-          const last = this.candles[this.candles.length - 1];
-          this.basePrice = last.close;
-          this.priceEl.textContent = `$${this.fmtPrice(last.close)}`;
-          this.clockEl.textContent = `History loaded ${this.nowClock()}`;
-          this.setStatus(`Loaded ${this.candles.length} historical candles`);
-          this.sourceEl.textContent = `Source: ${source}. Live stream: Coinbase market_trades + level2.`;
-          this.updateStats();
-          this.render();
-          return;
-        }
-
-        this.setStatus("No historical candles found; starting live stream");
       } catch (_err) {
-        this.setStatus("Bootstrap error; starting live stream");
+        // fall back to live-only mode
       }
     }
 
@@ -105,10 +176,12 @@
 
       ws.onopen = () => {
         this.reconnectMs = 1000;
-        this.setStatus("Live: market_trades connected");
+        this.wsConnected = true;
+        this.setStatus(`Live: ${this.activeProduct} connected`);
         this.obStatusEl.textContent = "Live";
-        ws.send(JSON.stringify({ type: "subscribe", product_ids: [CONFIG.productId], channel: "market_trades" }));
-        ws.send(JSON.stringify({ type: "subscribe", product_ids: [CONFIG.productId], channel: "level2" }));
+        ws.send(JSON.stringify({ type: "subscribe", product_ids: CONFIG.products, channel: "market_trades" }));
+        ws.send(JSON.stringify({ type: "subscribe", product_ids: CONFIG.products, channel: "level2" }));
+        this.refreshDisplay();
       };
 
       ws.onmessage = (evt) => {
@@ -117,11 +190,13 @@
       };
 
       ws.onerror = () => {
+        this.wsConnected = false;
         this.setStatus("Stream error; retrying...");
         this.obStatusEl.textContent = "Error; retrying";
       };
 
       ws.onclose = () => {
+        this.wsConnected = false;
         this.setStatus(`Disconnected; reconnecting in ${Math.round(this.reconnectMs / 1000)}s`);
         this.obStatusEl.textContent = "Disconnected";
         setTimeout(() => this.connectWs(), this.reconnectMs);
@@ -140,84 +215,107 @@
     handleTradeEvent(event) {
       const trades = Array.isArray(event?.trades) ? event.trades : [];
       for (const t of trades) {
-        if (t.product_id !== CONFIG.productId || !t.price) continue;
+        const product = t.product_id;
+        if (!CONFIG.products.includes(product) || !t.price) continue;
+
         const price = Number(t.price);
         if (!Number.isFinite(price)) continue;
         const size = t.size ? Number(t.size) : 0;
-        this.upsertTick(price, Number.isFinite(size) ? size : 0, t.time);
-        this.priceEl.textContent = `$${this.fmtPrice(price)}`;
-        this.flashPrice();
+
+        this.upsertTick(product, price, Number.isFinite(size) ? size : 0, t.time);
       }
     }
 
     handleLevel2Event(event) {
       const updates = [];
+      const defaultProduct = CONFIG.products.includes(event?.product_id) ? event.product_id : null;
 
       if (Array.isArray(event?.updates)) {
-        updates.push(...event.updates);
+        for (const row of event.updates) {
+          updates.push({ product: this.resolveBookProduct(row, defaultProduct), row });
+        }
       }
 
       if (Array.isArray(event?.bids)) {
         for (const row of event.bids) {
-          const parsed = this.normalizeBookRow("bid", row);
-          if (parsed) updates.push(parsed);
+          const normalized = this.normalizeBookRow("bid", row);
+          if (normalized) {
+            updates.push({ product: defaultProduct, row: normalized });
+          }
         }
       }
 
       if (Array.isArray(event?.asks)) {
         for (const row of event.asks) {
-          const parsed = this.normalizeBookRow("ask", row);
-          if (parsed) updates.push(parsed);
+          const normalized = this.normalizeBookRow("ask", row);
+          if (normalized) {
+            updates.push({ product: defaultProduct, row: normalized });
+          }
         }
       }
 
-      for (const u of updates) {
-        const parsed = this.normalizeUpdate(u);
-        if (!parsed) continue;
-        this.applyBookUpdate(parsed.side, parsed.price, parsed.size);
+      let activeChanged = false;
+      for (const item of updates) {
+        const parsed = this.normalizeUpdate(item.row);
+        const product = this.resolveBookProduct(item.row, item.product);
+        if (!parsed || !product) continue;
+        this.applyBookUpdate(product, parsed.side, parsed.price, parsed.size);
+        if (product === this.activeProduct) activeChanged = true;
       }
 
-      if (updates.length > 0) {
+      if (activeChanged) {
         this.obStatusEl.textContent = "Live";
         this.renderOrderBook();
       }
     }
 
-    async hydrateOrderBookFromRest() {
-      if (this.bookHydratePending) return;
+    resolveBookProduct(update, fallback) {
+      const candidate = typeof update?.product_id === "string" ? update.product_id : fallback;
+      return CONFIG.products.includes(candidate) ? candidate : null;
+    }
+
+    async hydrateOrderBookFromRest(product) {
+      const state = this.getState(product);
+      if (state.bookHydratePending) return;
       const now = Date.now();
-      if (now - this.lastBookHydrateMs < 8000) return;
-      this.bookHydratePending = true;
+      if (now - state.lastBookHydrateMs < 8000) return;
+
+      state.bookHydratePending = true;
       try {
         const q = new URLSearchParams({
-          product: CONFIG.productId,
+          product,
           level: "2",
           limit: String(Math.max(CONFIG.depthLevels, 20)),
         });
         const resp = await fetch(`/api/orderbook?${q.toString()}`, { cache: "no-store" });
         if (!resp.ok) return;
+
         const payload = await resp.json();
         const bids = Array.isArray(payload.bids) ? payload.bids : [];
         const asks = Array.isArray(payload.asks) ? payload.asks : [];
+
         for (const row of bids) {
           const p = Number(row.price);
           const s = Number(row.size);
           if (Number.isFinite(p) && Number.isFinite(s) && s > 0) {
-            this.applyBookUpdate("bid", p, s);
+            this.applyBookUpdate(product, "bid", p, s);
           }
         }
         for (const row of asks) {
           const p = Number(row.price);
           const s = Number(row.size);
           if (Number.isFinite(p) && Number.isFinite(s) && s > 0) {
-            this.applyBookUpdate("ask", p, s);
+            this.applyBookUpdate(product, "ask", p, s);
           }
         }
-        this.obStatusEl.textContent = "Live (hydrated)";
-        this.lastBookHydrateMs = Date.now();
-        this.renderOrderBook();
+
+        state.lastBookHydrateMs = Date.now();
+        if (product === this.activeProduct) {
+          this.obStatusEl.textContent = "Live (hydrated)";
+          this.renderOrderBook();
+        }
       } finally {
-        this.bookHydratePending = false;
+        state.bookHydratePending = false;
       }
     }
 
@@ -233,7 +331,11 @@
 
     normalizeUpdate(update) {
       const rawSide = String(update.side || "").toLowerCase();
-      const side = rawSide === "bid" || rawSide === "buy" ? "bid" : rawSide === "ask" || rawSide === "offer" || rawSide === "sell" ? "ask" : "";
+      const side = rawSide === "bid" || rawSide === "buy"
+        ? "bid"
+        : rawSide === "ask" || rawSide === "offer" || rawSide === "sell"
+          ? "ask"
+          : "";
       if (!side) return null;
 
       const price = Number(update.price_level ?? update.price ?? update.px);
@@ -242,8 +344,9 @@
       return { side, price, size };
     }
 
-    applyBookUpdate(side, price, size) {
-      const book = side === "bid" ? this.bids : this.asks;
+    applyBookUpdate(product, side, price, size) {
+      const state = this.getState(product);
+      const book = side === "bid" ? state.bids : state.asks;
       const key = price.toFixed(8);
       if (size <= 0) {
         book.delete(key);
@@ -252,19 +355,21 @@
       }
     }
 
-    topLevels(side, n) {
-      const book = side === "bid" ? this.bids : this.asks;
+    topLevels(product, side, n) {
+      const state = this.getState(product);
+      const book = side === "bid" ? state.bids : state.asks;
       const entries = [...book.entries()].map(([priceKey, size]) => ({ price: Number(priceKey), size }));
-      entries.sort((a, b) => side === "bid" ? b.price - a.price : a.price - b.price);
+      entries.sort((a, b) => (side === "bid" ? b.price - a.price : a.price - b.price));
       return entries.slice(0, n);
     }
 
     renderOrderBook() {
-      const bids = this.topLevels("bid", CONFIG.depthLevels);
-      const asks = this.topLevels("ask", CONFIG.depthLevels);
+      const product = this.activeProduct;
+      const bids = this.topLevels(product, "bid", CONFIG.depthLevels);
+      const asks = this.topLevels(product, "ask", CONFIG.depthLevels);
 
       if (bids.length < CONFIG.depthLevels || asks.length < CONFIG.depthLevels) {
-        void this.hydrateOrderBookFromRest();
+        void this.hydrateOrderBookFromRest(product);
       }
 
       this.bidsTableEl.innerHTML = this.renderBookSideRows(bids, "bid");
@@ -276,7 +381,9 @@
 
       this.bestBidEl.textContent = bestBid === null ? "--" : this.fmtPrice(bestBid);
       this.bestAskEl.textContent = bestAsk === null ? "--" : this.fmtPrice(bestAsk);
-      this.spreadEl.textContent = spread === null ? "--" : `${spread.toFixed(4)} (${((spread / ((bestBid + bestAsk) / 2)) * 100).toFixed(3)}%)`;
+      this.spreadEl.textContent = spread === null
+        ? "--"
+        : `${spread.toFixed(4)} (${((spread / ((bestBid + bestAsk) / 2)) * 100).toFixed(3)}%)`;
 
       const bidVol = bids.reduce((acc, x) => acc + x.size, 0);
       const askVol = asks.reduce((acc, x) => acc + x.size, 0);
@@ -292,18 +399,18 @@
         .join("");
     }
 
-    upsertTick(price, size, timeIso) {
+    upsertTick(product, price, size, timeIso) {
+      const state = this.getState(product);
       const tsMs = timeIso ? Date.parse(timeIso) : Date.now();
-      this.trackTickRate(tsMs);
-      this.clockEl.textContent = `Updated ${this.nowClock()}`;
-      if (this.basePrice === null) this.basePrice = price;
+      this.trackTickRate(product, tsMs);
+      if (state.basePrice === null) state.basePrice = price;
 
       const bucket = this.bucketStart(tsMs);
-      let current = this.candles[this.candles.length - 1];
+      let current = state.candles[state.candles.length - 1];
       if (!current || current.start !== bucket) {
         current = { start: bucket, open: price, high: price, low: price, close: price, volume: size || 0 };
-        this.candles.push(current);
-        if (this.candles.length > CONFIG.maxCandles) this.candles.shift();
+        state.candles.push(current);
+        if (state.candles.length > CONFIG.maxCandles) state.candles.shift();
       } else {
         current.high = Math.max(current.high, price);
         current.low = Math.min(current.low, price);
@@ -311,21 +418,37 @@
         current.volume += size || 0;
       }
 
-      this.updateChange(price);
-      this.updateStats();
-      this.render();
+      state.lastPrice = price;
+      state.lastUpdateTs = tsMs;
+
+      if (product === this.activeProduct) {
+        this.priceEl.textContent = `$${this.fmtPrice(price)}`;
+        this.clockEl.textContent = `Updated ${this.nowClock(tsMs)}`;
+        this.updateChange(price);
+        this.updateStats();
+        this.tpmEl.textContent = String(state.tickTimes.length);
+        this.flashPrice();
+        this.render();
+      }
     }
 
     updateChange(price) {
-      if (this.basePrice === null || this.basePrice <= 0) return;
-      const pct = ((price - this.basePrice) / this.basePrice) * 100;
-      this.changeEl.textContent = `${price >= this.basePrice ? "▲" : "▼"} ${this.fmtPct(pct)} since connect`;
+      const state = this.getState();
+      if (state.basePrice === null || state.basePrice <= 0) return;
+      const pct = ((price - state.basePrice) / state.basePrice) * 100;
+      this.changeEl.textContent = `${price >= state.basePrice ? "▲" : "▼"} ${this.fmtPct(pct)} since connect`;
       this.changeEl.className = `chg ${pct > 0.02 ? "up" : pct < -0.02 ? "dn" : "flat"}`;
     }
 
     updateStats() {
-      if (!this.candles.length) return;
-      const recent = this.candles.slice(-60);
+      const state = this.getState();
+      if (!state.candles.length) {
+        this.rangeEl.textContent = "--";
+        this.volEl.textContent = "--";
+        return;
+      }
+
+      const recent = state.candles.slice(-60);
       const hi = Math.max(...recent.map((c) => c.high));
       const lo = Math.min(...recent.map((c) => c.low));
       const mid = (hi + lo) / 2;
@@ -337,6 +460,7 @@
         this.volEl.textContent = "--";
         return;
       }
+
       const rets = [];
       for (let i = 1; i < closes.length; i++) {
         rets.push((closes[i] - closes[i - 1]) / closes[i - 1]);
@@ -347,8 +471,9 @@
     }
 
     render() {
+      const state = this.getState();
       this.chart.textContent = "";
-      if (!this.candles.length) return;
+      if (!state.candles.length) return;
 
       const width = 1040;
       const height = 520;
@@ -356,7 +481,7 @@
       const innerW = width - pad.left - pad.right;
       const innerH = height - pad.top - pad.bottom;
 
-      const visible = this.candles.slice(-80);
+      const visible = state.candles.slice(-80);
       let lo = Math.min(...visible.map((c) => c.low));
       let hi = Math.max(...visible.map((c) => c.high));
       const spreadRaw = Math.max(hi - lo, 1e-8);
@@ -441,11 +566,11 @@
       this.chart.appendChild(node);
     }
 
-    trackTickRate(tsMs) {
-      this.tickTimes.push(tsMs);
+    trackTickRate(product, tsMs) {
+      const state = this.getState(product);
+      state.tickTimes.push(tsMs);
       const cutoff = tsMs - 60_000;
-      while (this.tickTimes.length && this.tickTimes[0] < cutoff) this.tickTimes.shift();
-      this.tpmEl.textContent = String(this.tickTimes.length);
+      while (state.tickTimes.length && state.tickTimes[0] < cutoff) state.tickTimes.shift();
     }
 
     flashPrice() {
@@ -466,8 +591,8 @@
       return `${v >= 0 ? "+" : ""}${v.toFixed(2)}%`;
     }
 
-    nowClock() {
-      return new Date().toLocaleTimeString();
+    nowClock(tsMs = Date.now()) {
+      return new Date(tsMs).toLocaleTimeString();
     }
 
     setStatus(msg) {

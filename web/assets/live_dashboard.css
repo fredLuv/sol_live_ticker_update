@@ -48,6 +48,31 @@ body {
   min-height: 74px;
 }
 .brand h1 { margin: 0; font-size: 22px; letter-spacing: 0.2px; }
+.market-toggle {
+  margin-top: 8px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.market-btn {
+  border: 1px solid rgba(146, 186, 229, 0.26);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--muted);
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 1;
+  padding: 7px 11px;
+  cursor: pointer;
+}
+.market-btn:hover {
+  border-color: rgba(146, 186, 229, 0.45);
+  color: var(--text);
+}
+.market-btn.active {
+  border-color: rgba(114, 188, 255, 0.8);
+  background: rgba(114, 188, 255, 0.16);
+  color: #dff0ff;
+}
 .sub { margin-top: 4px; color: var(--muted); font-size: 13px; }
 .kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .kpi {
