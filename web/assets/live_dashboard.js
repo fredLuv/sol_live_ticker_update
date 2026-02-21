@@ -74,6 +74,9 @@
       await Promise.all(CONFIG.products.map((product) => this.bootstrapHistory(product)));
       this.connectWs();
       this.setActiveProduct(this.activeProduct);
+      setInterval(() => {
+        this.tpmEl.textContent = String(this.currentTicksPerMinute(this.activeProduct));
+      }, 1000);
     }
 
     renderMarketToggle() {
@@ -115,7 +118,7 @@
       }
 
       this.updateStats();
-      this.tpmEl.textContent = String(state.tickTimes.length);
+      this.tpmEl.textContent = String(this.currentTicksPerMinute(this.activeProduct));
       this.render();
       this.renderOrderBook();
 
@@ -405,8 +408,10 @@
 
     upsertTick(product, price, size, timeIso) {
       const state = this.getState(product);
-      const tsMs = timeIso ? Date.parse(timeIso) : Date.now();
-      this.trackTickRate(product, tsMs);
+      const arrivalMs = Date.now();
+      const parsedTs = timeIso ? Date.parse(timeIso) : NaN;
+      const tsMs = Number.isFinite(parsedTs) ? parsedTs : arrivalMs;
+      this.trackTickRate(product, arrivalMs);
       if (state.basePrice === null) state.basePrice = price;
 
       const bucket = this.bucketStart(tsMs);
@@ -430,7 +435,7 @@
         this.clockEl.textContent = `Updated ${this.nowClock(tsMs)}`;
         this.updateChange(price);
         this.updateStats();
-        this.tpmEl.textContent = String(state.tickTimes.length);
+        this.tpmEl.textContent = String(this.currentTicksPerMinute(product));
         this.flashPrice();
         this.render();
       }
@@ -573,8 +578,15 @@
     trackTickRate(product, tsMs) {
       const state = this.getState(product);
       state.tickTimes.push(tsMs);
-      const cutoff = tsMs - 60_000;
+      const cutoff = Date.now() - 60_000;
       while (state.tickTimes.length && state.tickTimes[0] < cutoff) state.tickTimes.shift();
+    }
+
+    currentTicksPerMinute(product = this.activeProduct) {
+      const state = this.getState(product);
+      const cutoff = Date.now() - 60_000;
+      while (state.tickTimes.length && state.tickTimes[0] < cutoff) state.tickTimes.shift();
+      return state.tickTimes.length;
     }
 
     flashPrice() {
