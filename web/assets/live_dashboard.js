@@ -430,12 +430,11 @@
     upsertTick(product, price, size, timeIso) {
       const state = this.getState(product);
       const arrivalMs = Date.now();
-      const parsedTs = timeIso ? Date.parse(timeIso) : NaN;
-      const tsMs = Number.isFinite(parsedTs) ? parsedTs : arrivalMs;
       this.recordTradeSample(product, arrivalMs);
       if (state.basePrice === null) state.basePrice = price;
 
-      const bucket = this.bucketStart(tsMs);
+      // Use local arrival time for UI freshness and bucket alignment.
+      const bucket = this.bucketStart(arrivalMs);
       let current = state.candles[state.candles.length - 1];
       if (!current || current.start !== bucket) {
         current = { start: bucket, open: price, high: price, low: price, close: price, volume: size || 0 };
@@ -450,11 +449,11 @@
 
       state.hasLiveTrade = true;
       state.lastPrice = price;
-      state.lastUpdateTs = tsMs;
+      state.lastUpdateTs = arrivalMs;
 
       if (product === this.activeProduct) {
         this.priceEl.textContent = this.fmtQuotePrice(price, product);
-        this.clockEl.textContent = `Updated ${this.nowClock(tsMs)}`;
+        this.clockEl.textContent = `Updated ${this.nowClock(arrivalMs)}`;
         this.updateChange(price);
         this.updateStats();
         this.refreshTradeCount(product);
