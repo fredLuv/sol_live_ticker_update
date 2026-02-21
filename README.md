@@ -2,9 +2,9 @@
 
 Standalone multi-market live terminal app (Coinbase):
 - top toggle: `SOL-USD`, `BTC-USD`, `SOL-BTC`
-- `market_trades` for trade-driven candles
-- `level2` for top-of-book + spread/imbalance panel
-- bootstrap + depth from Coinbase REST, live ticks from Coinbase websocket
+- live candlestick updates from Coinbase `market_trades`
+- top-of-book + spread/imbalance from Coinbase `level2`
+- REST bootstrap for recent candles + order book hydration
 
 ## Preview
 
@@ -30,6 +30,20 @@ python scripts/run_live_terminal.py \
 
 Open:
 - http://127.0.0.1:8765/live_crypto_dashboard.html
+
+## Startup Scripts
+
+- Local entrypoint: `scripts/run_live_terminal.py`
+  - starts `scripts/serve_live_dashboard.py`
+- Render entrypoint: `scripts/start_render.sh`
+  - runs `run_live_terminal.py` with `HOST`/`PORT`
+
+## Data Flow
+
+- `/api/bootstrap`: Coinbase REST candles (`/products/{product}/candles`)
+- `/api/orderbook`: Coinbase REST order book (`/products/{product}/book`)
+- Browser websocket: `wss://advanced-trade-ws.coinbase.com`
+  - subscribes to `market_trades` and `level2` for all supported pairs
 
 ## Folder layout
 
