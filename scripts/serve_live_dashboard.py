@@ -184,6 +184,15 @@ def _build_handler(web_root: Path):
 
         def do_GET(self) -> None:  # noqa: N802
             parsed = urlparse(self.path)
+            if parsed.path in ("/", "/index.html"):
+                self.path = "/live_crypto_dashboard.html"
+                super().do_GET()
+                return
+            if parsed.path == "/llve_crypto_dashboard.html":
+                self.send_response(HTTPStatus.MOVED_PERMANENTLY)
+                self.send_header("Location", "/live_crypto_dashboard.html")
+                self.end_headers()
+                return
             if parsed.path == "/api/bootstrap":
                 if self._is_rate_limited():
                     _json_error(self, HTTPStatus.TOO_MANY_REQUESTS, "rate limit exceeded")
@@ -260,6 +269,17 @@ def _build_handler(web_root: Path):
                 return
 
             super().do_GET()
+
+        def do_HEAD(self) -> None:  # noqa: N802
+            parsed = urlparse(self.path)
+            if parsed.path in ("/", "/index.html"):
+                self.path = "/live_crypto_dashboard.html"
+            elif parsed.path == "/llve_crypto_dashboard.html":
+                self.send_response(HTTPStatus.MOVED_PERMANENTLY)
+                self.send_header("Location", "/live_crypto_dashboard.html")
+                self.end_headers()
+                return
+            super().do_HEAD()
 
     return DashboardHandler
 
