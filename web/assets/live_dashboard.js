@@ -24,7 +24,6 @@
       this.changeEl = document.getElementById("change");
       this.rangeEl = document.getElementById("range");
       this.volEl = document.getElementById("volatility");
-      this.tpmEl = document.getElementById("tpm");
       this.clockEl = document.getElementById("clock");
       this.chart = document.getElementById("chart");
 
@@ -50,8 +49,6 @@
     createEmptyState() {
       return {
         candles: [],
-        tradeBuckets: new Uint16Array(60),
-        tradeBucketSec: new Int32Array(60),
         hasLiveTrade: false,
         basePrice: null,
         lastPrice: null,
@@ -79,7 +76,6 @@
       await Promise.all(CONFIG.products.map((product) => this.bootstrapHistory(product)));
       this.connectWs();
       this.setActiveProduct(this.activeProduct);
-      setInterval(() => this.refreshTradeCount(), 1000);
     }
 
     renderMarketToggle() {
@@ -128,7 +124,6 @@
       }
 
       this.updateStats();
-      this.refreshTradeCount();
       this.render();
       this.renderOrderBook();
 
@@ -425,7 +420,6 @@
     upsertTick(product, price, size, timeIso) {
       const state = this.getState(product);
       const arrivalMs = Date.now();
-      this.recordTradeSample(product, arrivalMs);
       if (state.basePrice === null) state.basePrice = price;
 
       // Use local arrival time for UI freshness and bucket alignment.
@@ -451,7 +445,6 @@
         this.clockEl.textContent = `Updated ${this.nowClock(arrivalMs)}`;
         this.updateChange(price);
         this.updateStats();
-        this.refreshTradeCount(product);
         this.flashPrice();
         this.render();
       }
@@ -589,35 +582,6 @@
       if (fill) node.setAttribute("fill", fill);
       node.textContent = text;
       this.chart.appendChild(node);
-    }
-
-    refreshTradeCount(product = this.activeProduct) {
-      this.tpmEl.textContent = String(this.rollingTradeCount60s(product));
-    }
-
-    recordTradeSample(product, tsMs) {
-      const state = this.getState(product);
-      const sec = Math.floor(tsMs / 1000);
-      const idx = sec % 60;
-      if (state.tradeBucketSec[idx] !== sec) {
-        state.tradeBucketSec[idx] = sec;
-        state.tradeBuckets[idx] = 0;
-      }
-      if (state.tradeBuckets[idx] < 0xffff) {
-        state.tradeBuckets[idx] += 1;
-      }
-    }
-
-    rollingTradeCount60s(product = this.activeProduct) {
-      const state = this.getState(product);
-      const nowSec = Math.floor(Date.now() / 1000);
-      const cutoff = nowSec - 59;
-      let total = 0;
-      for (let i = 0; i < 60; i++) {
-        const sec = state.tradeBucketSec[i];
-        if (sec >= cutoff && sec <= nowSec) total += state.tradeBuckets[i];
-      }
-      return total;
     }
 
     flashPrice() {
