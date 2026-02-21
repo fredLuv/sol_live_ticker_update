@@ -34,6 +34,8 @@
       this.reconnectMs = 1000;
       this.bids = new Map();
       this.asks = new Map();
+      this.lastBookHydrateMs = 0;
+      this.bookHydratePending = false;
     }
 
     async start() {
@@ -181,6 +183,44 @@
       }
     }
 
+    async hydrateOrderBookFromRest() {
+      if (this.bookHydratePending) return;
+      const now = Date.now();
+      if (now - this.lastBookHydrateMs < 8000) return;
+      this.bookHydratePending = true;
+      try {
+        const q = new URLSearchParams({
+          product: CONFIG.productId,
+          level: "2",
+          limit: String(Math.max(CONFIG.depthLevels, 20)),
+        });
+        const resp = await fetch(`/api/orderbook?${q.toString()}`, { cache: "no-store" });
+        if (!resp.ok) return;
+        const payload = await resp.json();
+        const bids = Array.isArray(payload.bids) ? payload.bids : [];
+        const asks = Array.isArray(payload.asks) ? payload.asks : [];
+        for (const row of bids) {
+          const p = Number(row.price);
+          const s = Number(row.size);
+          if (Number.isFinite(p) && Number.isFinite(s) && s > 0) {
+            this.applyBookUpdate("bid", p, s);
+          }
+        }
+        for (const row of asks) {
+          const p = Number(row.price);
+          const s = Number(row.size);
+          if (Number.isFinite(p) && Number.isFinite(s) && s > 0) {
+            this.applyBookUpdate("ask", p, s);
+          }
+        }
+        this.obStatusEl.textContent = "Live (hydrated)";
+        this.lastBookHydrateMs = Date.now();
+        this.renderOrderBook();
+      } finally {
+        this.bookHydratePending = false;
+      }
+    }
+
     normalizeBookRow(side, row) {
       if (Array.isArray(row) && row.length >= 2) {
         return { side, price_level: row[0], new_quantity: row[1] };
@@ -222,6 +262,10 @@
     renderOrderBook() {
       const bids = this.topLevels("bid", CONFIG.depthLevels);
       const asks = this.topLevels("ask", CONFIG.depthLevels);
+
+      if (bids.length < CONFIG.depthLevels || asks.length < CONFIG.depthLevels) {
+        void this.hydrateOrderBookFromRest();
+      }
 
       this.bidsTableEl.innerHTML = this.renderBookSideRows(bids, "bid");
       this.asksTableEl.innerHTML = this.renderBookSideRows(asks, "ask");

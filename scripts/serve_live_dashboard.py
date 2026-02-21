@@ -90,6 +90,48 @@ def _fetch_coinbase_rest_candles(product_id: str, limit: int) -> list[dict[str, 
     return rows[-limit:]
 
 
+def _fetch_coinbase_rest_order_book(
+    product_id: str, level: int, limit: int
+) -> dict[str, list[dict[str, float]]]:
+    level_value = level if level in (1, 2, 3) else 2
+    url = f"https://api.exchange.coinbase.com/products/{quote(product_id)}/book?level={level_value}"
+    req = Request(
+        url,
+        headers={
+            "User-Agent": "qrt-live-dashboard/1.0",
+            "Accept": "application/json",
+        },
+    )
+    with urlopen(req, timeout=8.0) as resp:  # noqa: S310 - intentional trusted outbound request
+        payload = json.loads(resp.read().decode("utf-8"))
+
+    bids_raw = payload.get("bids", []) if isinstance(payload, dict) else []
+    asks_raw = payload.get("asks", []) if isinstance(payload, dict) else []
+
+    def _parse_side(rows: object, side: str) -> list[dict[str, float]]:
+        out: list[dict[str, float]] = []
+        if not isinstance(rows, list):
+            return out
+        for row in rows:
+            if not isinstance(row, list) or len(row) < 2:
+                continue
+            try:
+                price = float(row[0])
+                size = float(row[1])
+            except (TypeError, ValueError):
+                continue
+            out.append({"price": price, "size": size})
+            if len(out) >= limit:
+                break
+        out.sort(key=lambda r: r["price"], reverse=(side == "bid"))
+        return out
+
+    return {
+        "bids": _parse_side(bids_raw, side="bid"),
+        "asks": _parse_side(asks_raw, side="ask"),
+    }
+
+
 def _json_response(handler: SimpleHTTPRequestHandler, payload_obj: dict[str, object]) -> None:
     payload = json.dumps(payload_obj).encode("utf-8")
     handler.send_response(HTTPStatus.OK)
@@ -128,6 +170,7 @@ def _build_handler(web_root: Path, history_csv: Path):
         _rate_lock = threading.Lock()
         _ip_hits: dict[str, list[float]] = {}
         _bootstrap_cache: dict[tuple[str, int, int], tuple[float, dict[str, object]]] = {}
+        _orderbook_cache: dict[tuple[str, int, int], tuple[float, dict[str, object]]] = {}
 
         def __init__(self, *args, **kwargs):
             super().__init__(*args, directory=str(web_root), **kwargs)
@@ -237,6 +280,36 @@ def _build_handler(web_root: Path, history_csv: Path):
                     "product": product,
                 }
                 DashboardHandler._bootstrap_cache[cache_key] = (now, payload)
+                _json_response(self, payload)
+                return
+
+            if parsed.path == "/api/orderbook":
+                if self._is_rate_limited():
+                    _json_error(self, HTTPStatus.TOO_MANY_REQUESTS, "rate limit exceeded")
+                    return
+                query = parse_qs(parsed.query)
+                product = self._sanitize_product(query.get("product", ["SOL-USD"])[0])
+                level = _parse_int(query, key="level", default=2, low=1, high=3)
+                limit = _parse_int(query, key="limit", default=20, low=1, high=100)
+                key = (product, level, limit)
+                now = time.time()
+                cached = DashboardHandler._orderbook_cache.get(key)
+                if cached and now - cached[0] <= 5.0:
+                    _json_response(self, cached[1])
+                    return
+                try:
+                    book = _fetch_coinbase_rest_order_book(product_id=product, level=level, limit=limit)
+                except Exception as exc:
+                    _json_error(self, HTTPStatus.BAD_GATEWAY, f"orderbook upstream failed: {exc}")
+                    return
+                payload = {
+                    "source": "coinbase_rest_book",
+                    "product": product,
+                    "level": level,
+                    "bids": book["bids"],
+                    "asks": book["asks"],
+                }
+                DashboardHandler._orderbook_cache[key] = (now, payload)
                 _json_response(self, payload)
                 return
 
