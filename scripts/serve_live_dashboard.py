@@ -16,7 +16,7 @@ from urllib.request import Request, urlopen
 PRODUCT_RE = re.compile(r"^[A-Z0-9-]{3,20}$")
 
 
-def _read_history_rows(path: Path, limit: int) -> list[dict[str, object]]:
+def _read_history_rows(path: Path, limit: int, product_id: str | None = None) -> list[dict[str, object]]:
     if not path.exists():
         return []
     rows: list[dict[str, object]] = []
@@ -24,6 +24,9 @@ def _read_history_rows(path: Path, limit: int) -> list[dict[str, object]]:
         reader = csv.DictReader(f)
         for row in reader:
             try:
+                row_product = str(row.get("product_id", "")).strip().upper()
+                if product_id is not None and row_product and row_product != product_id:
+                    continue
                 rows.append(
                     {
                         "start": row["start_ts"],
@@ -216,7 +219,8 @@ def _build_handler(web_root: Path, history_csv: Path):
                     return
                 query = parse_qs(parsed.query)
                 limit = _parse_int(query, key="limit", default=120, low=1, high=2000)
-                rows = _read_history_rows(history_csv, limit)
+                product = self._sanitize_product(query.get("product", [""])[0]) if "product" in query else None
+                rows = _read_history_rows(history_csv, limit, product_id=product)
                 _json_response(self, {"source": "local_csv", "candles": rows})
                 return
 
@@ -236,7 +240,7 @@ def _build_handler(web_root: Path, history_csv: Path):
                     _json_response(self, cached[1])
                     return
 
-                local_rows = _read_history_rows(history_csv, limit)
+                local_rows = _read_history_rows(history_csv, limit, product_id=product)
                 if len(local_rows) >= min_local:
                     payload = {
                         "source": "local_csv",
