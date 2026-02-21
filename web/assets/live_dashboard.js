@@ -52,6 +52,7 @@
         candles: [],
         tradeBuckets: new Uint16Array(60),
         tradeBucketSec: new Int32Array(60),
+        hasLiveTrade: false,
         basePrice: null,
         lastPrice: null,
         lastUpdateTs: null,
@@ -107,7 +108,7 @@
 
     refreshDisplay() {
       const state = this.getState();
-      if (state.lastPrice !== null) {
+      if (state.hasLiveTrade && state.lastPrice !== null) {
         this.priceEl.textContent = this.fmtQuotePrice(state.lastPrice, this.activeProduct);
         this.updateChange(state.lastPrice);
       } else {
@@ -121,8 +122,10 @@
       this.render();
       this.renderOrderBook();
 
-      if (state.lastUpdateTs) {
+      if (state.hasLiveTrade && state.lastUpdateTs) {
         this.clockEl.textContent = `Updated ${new Date(state.lastUpdateTs).toLocaleTimeString()}`;
+      } else {
+        this.clockEl.textContent = "Waiting for live trade...";
       }
 
       const streamState = this.wsConnected ? "Coinbase market_trades + level2" : "connecting...";
@@ -148,13 +151,6 @@
 
         state.candles = candles.slice(-CONFIG.maxCandles);
         state.historySource = source;
-
-        if (state.candles.length > 0) {
-          const last = state.candles[state.candles.length - 1];
-          state.basePrice = last.close;
-          state.lastPrice = last.close;
-          state.lastUpdateTs = Date.now();
-        }
       } catch (_err) {
         // fall back to live-only mode
       }
@@ -426,6 +422,7 @@
         current.volume += size || 0;
       }
 
+      state.hasLiveTrade = true;
       state.lastPrice = price;
       state.lastUpdateTs = tsMs;
 
