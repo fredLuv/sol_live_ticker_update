@@ -1,6 +1,7 @@
 # Crypto Live Update
 
-Standalone SOL-USD + BTC-USD live terminal app (Coinbase):
+Standalone multi-market live terminal app (Coinbase):
+- top toggle: `SOL-USD`, `BTC-USD`, `SOL-BTC`
 - `market_trades` for trade-driven candles
 - `level2` for top-of-book + spread/imbalance panel
 - local bootstrap fallback (`CSV -> Coinbase REST -> live websocket`)
@@ -28,6 +29,8 @@ python scripts/run_live_terminal.py \
   --host 127.0.0.1 \
   --port 8765
 ```
+
+Note: `--product` controls the local candle writer seed stream. The dashboard itself toggles across all supported products.
 
 Open:
 - http://127.0.0.1:8765/live_crypto_dashboard.html
