@@ -77,7 +77,7 @@ async def stream_ticks(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Stream Coinbase market data to CSV")
+    parser = argparse.ArgumentParser(description="Stream Coinbase market data and persist candles")
     parser.add_argument("--product", default="SOL-USD", help="Coinbase product id (default: SOL-USD)")
     parser.add_argument(
         "--channel",
