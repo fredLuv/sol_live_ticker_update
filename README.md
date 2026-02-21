@@ -1,6 +1,6 @@
-# SOL Live Update
+# Crypto Live Update
 
-Standalone SOL-USD live terminal app (Coinbase):
+Standalone SOL-USD + BTC-USD live terminal app (Coinbase):
 - `market_trades` for trade-driven candles
 - `level2` for top-of-book + spread/imbalance panel
 - local bootstrap fallback (`CSV -> Coinbase REST -> live websocket`)
@@ -30,7 +30,7 @@ python scripts/run_live_terminal.py \
 ```
 
 Open:
-- http://127.0.0.1:8765/live_sol_dashboard.html
+- http://127.0.0.1:8765/live_crypto_dashboard.html
 
 ## Folder layout
 

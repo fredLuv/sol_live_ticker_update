@@ -80,7 +80,7 @@ def main() -> None:
     ]
 
     print("Starting live stream + dashboard server...")
-    print(f"Dashboard URL: http://{args.host}:{args.port}/live_sol_dashboard.html")
+    print(f"Dashboard URL: http://{args.host}:{args.port}/live_crypto_dashboard.html")
 
     stream_proc = _start_process(stream_cmd, cwd=repo, env=env)
     serve_proc = _start_process(serve_cmd, cwd=repo, env=env)

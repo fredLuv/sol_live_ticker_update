@@ -341,7 +341,7 @@ def main() -> None:
     history_csv = Path(args.history_csv).resolve()
     handler = _build_handler(root, history_csv)
     server = ThreadingHTTPServer((args.host, args.port), handler)
-    print(f"Serving dashboard: http://{args.host}:{args.port}/live_sol_dashboard.html")
+    print(f"Serving dashboard: http://{args.host}:{args.port}/live_crypto_dashboard.html")
     print(f"History API: http://{args.host}:{args.port}/api/history?limit=120 -> {history_csv}")
     print(
         "Bootstrap API: "
