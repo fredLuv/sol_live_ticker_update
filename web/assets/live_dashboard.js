@@ -5,7 +5,7 @@
     candleMs: 5000,
     maxCandles: 90,
     bootstrapLimit: 240,
-    depthLevels: 5,
+    depthLevels: 10,
   };
 
   class LiveDashboard {
