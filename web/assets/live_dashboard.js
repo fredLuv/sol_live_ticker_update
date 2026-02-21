@@ -6,6 +6,7 @@
     candleMs: 5000,
     maxCandles: 90,
     bootstrapLimit: 240,
+    maxBootstrapAgeSec: 180,
     depthLevels: 10,
     priceDecimals: {
       "SOL-USD": 2,
@@ -56,6 +57,9 @@
         basePrice: null,
         lastPrice: null,
         lastUpdateTs: null,
+        lastBookTs: null,
+        bestBid: null,
+        bestAsk: null,
         bids: new Map(),
         asks: new Map(),
         lastBookHydrateMs: 0,
@@ -112,9 +116,16 @@
         this.priceEl.textContent = this.fmtQuotePrice(state.lastPrice, this.activeProduct);
         this.updateChange(state.lastPrice);
       } else {
-        this.priceEl.textContent = "--";
-        this.changeEl.textContent = "--";
-        this.changeEl.className = "chg flat";
+        const mid = this.liveMidPrice(state);
+        if (mid !== null) {
+          this.priceEl.textContent = this.fmtQuotePrice(mid, this.activeProduct);
+          this.changeEl.textContent = "L2 mid (live)";
+          this.changeEl.className = "chg flat";
+        } else {
+          this.priceEl.textContent = "--";
+          this.changeEl.textContent = "--";
+          this.changeEl.className = "chg flat";
+        }
       }
 
       this.updateStats();
@@ -124,6 +135,8 @@
 
       if (state.hasLiveTrade && state.lastUpdateTs) {
         this.clockEl.textContent = `Updated ${new Date(state.lastUpdateTs).toLocaleTimeString()}`;
+      } else if (state.lastBookTs) {
+        this.clockEl.textContent = `L2 ${new Date(state.lastBookTs).toLocaleTimeString()}`;
       } else {
         this.clockEl.textContent = "Waiting for live trade...";
       }
@@ -149,8 +162,12 @@
         const candles = rows.map((row) => this.parseHistoryRow(row)).filter((row) => row !== null);
         const state = this.getState(product);
 
-        state.candles = candles.slice(-CONFIG.maxCandles);
-        state.historySource = source;
+        const trimmed = candles.slice(-CONFIG.maxCandles);
+        const newest = trimmed.length ? trimmed[trimmed.length - 1] : null;
+        const newestAgeSec = newest ? Math.floor((Date.now() - newest.start) / 1000) : Number.POSITIVE_INFINITY;
+        const fresh = newestAgeSec <= CONFIG.maxBootstrapAgeSec;
+        state.candles = fresh ? trimmed : [];
+        state.historySource = fresh ? source : `${source} (stale bootstrap ignored)`;
       } catch (_err) {
         // fall back to live-only mode
       }
@@ -355,6 +372,7 @@
       } else {
         book.set(key, size);
       }
+      state.lastBookTs = Date.now();
     }
 
     topLevels(product, side, n) {
@@ -367,6 +385,7 @@
 
     renderOrderBook() {
       const product = this.activeProduct;
+      const state = this.getState(product);
       const bids = this.topLevels(product, "bid", CONFIG.depthLevels);
       const asks = this.topLevels(product, "ask", CONFIG.depthLevels);
 
@@ -379,6 +398,8 @@
 
       const bestBid = bids.length ? bids[0].price : null;
       const bestAsk = asks.length ? asks[0].price : null;
+      state.bestBid = bestBid;
+      state.bestAsk = bestAsk;
       const spread = bestBid !== null && bestAsk !== null ? bestAsk - bestBid : null;
 
       this.bestBidEl.textContent = bestBid === null ? "--" : this.fmtPrice(bestBid);
@@ -392,6 +413,11 @@
       const total = bidVol + askVol;
       const imbalance = total > 0 ? (bidVol / total) * 100 : null;
       this.imbalanceEl.textContent = imbalance === null ? "--" : `${imbalance.toFixed(1)}% bid`;
+    }
+
+    liveMidPrice(state) {
+      if (state.bestBid === null || state.bestAsk === null) return null;
+      return (state.bestBid + state.bestAsk) / 2;
     }
 
     renderBookSideRows(rows, cls) {
