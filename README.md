@@ -13,16 +13,17 @@ Standalone multi-market live terminal app (Coinbase):
 ## Setup
 
 ```bash
-cd /Users/fred/Desktop/IMC-Java-Code/sol_live_update
-. /Users/fred/Desktop/IMC-Java-Code/.venv/bin/activate
+cd sol_live_update
+python3 -m venv .venv
+. .venv/bin/activate
 python -m pip install -r requirements.txt
 ```
 
 ## Run (single command)
 
 ```bash
-cd /Users/fred/Desktop/IMC-Java-Code/sol_live_update
-. /Users/fred/Desktop/IMC-Java-Code/.venv/bin/activate
+cd sol_live_update
+. .venv/bin/activate
 python scripts/run_live_terminal.py \
   --host 127.0.0.1 \
   --port 8765
@@ -35,8 +36,6 @@ Open:
 
 - Local entrypoint: `scripts/run_live_terminal.py`
   - starts `scripts/serve_live_dashboard.py`
-- Render entrypoint: `scripts/start_render.sh`
-  - runs `run_live_terminal.py` with `HOST`/`PORT`
 
 ## Data Flow
 
