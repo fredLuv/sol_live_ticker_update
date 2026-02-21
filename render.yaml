@@ -9,9 +9,3 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.8
-      - key: PRODUCT_ID
-        value: SOL-USD
-      - key: CHANNEL
-        value: market_trades
-      - key: CANDLE_SECONDS
-        value: "5"

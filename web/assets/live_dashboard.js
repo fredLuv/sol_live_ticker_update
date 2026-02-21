@@ -134,7 +134,6 @@
         const q = new URLSearchParams({
           product,
           limit: String(CONFIG.bootstrapLimit),
-          min_local: "20",
         });
         const resp = await fetch(`/api/bootstrap?${q.toString()}`, { cache: "no-store" });
         if (!resp.ok) return;

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import csv
 import json
 import re
 import threading
@@ -14,34 +13,6 @@ from urllib.parse import parse_qs, quote, urlparse
 from urllib.request import Request, urlopen
 
 PRODUCT_RE = re.compile(r"^[A-Z0-9-]{3,20}$")
-
-
-def _read_history_rows(path: Path, limit: int, product_id: str | None = None) -> list[dict[str, object]]:
-    if not path.exists():
-        return []
-    rows: list[dict[str, object]] = []
-    with path.open("r", encoding="utf-8", newline="") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            try:
-                row_product = str(row.get("product_id", "")).strip().upper()
-                if product_id is not None and row_product and row_product != product_id:
-                    continue
-                rows.append(
-                    {
-                        "start": row["start_ts"],
-                        "open": float(row["open"]),
-                        "high": float(row["high"]),
-                        "low": float(row["low"]),
-                        "close": float(row["close"]),
-                        "volume": float(row["volume"]),
-                    }
-                )
-            except (KeyError, TypeError, ValueError):
-                continue
-    if limit <= 0:
-        return rows
-    return rows[-limit:]
 
 
 def _fetch_coinbase_rest_candles(product_id: str, limit: int) -> list[dict[str, object]]:
@@ -168,11 +139,11 @@ def _parse_int(query: dict[str, list[str]], key: str, default: int, low: int, hi
     return max(low, min(value, high))
 
 
-def _build_handler(web_root: Path, history_csv: Path):
+def _build_handler(web_root: Path):
     class DashboardHandler(SimpleHTTPRequestHandler):
         _rate_lock = threading.Lock()
         _ip_hits: dict[str, list[float]] = {}
-        _bootstrap_cache: dict[tuple[str, int, int], tuple[float, dict[str, object]]] = {}
+        _bootstrap_cache: dict[tuple[str, int], tuple[float, dict[str, object]]] = {}
         _orderbook_cache: dict[tuple[str, int, int], tuple[float, dict[str, object]]] = {}
 
         def __init__(self, *args, **kwargs):
@@ -213,43 +184,19 @@ def _build_handler(web_root: Path, history_csv: Path):
 
         def do_GET(self) -> None:  # noqa: N802
             parsed = urlparse(self.path)
-            if parsed.path == "/api/history":
-                if self._is_rate_limited():
-                    _json_error(self, HTTPStatus.TOO_MANY_REQUESTS, "rate limit exceeded")
-                    return
-                query = parse_qs(parsed.query)
-                limit = _parse_int(query, key="limit", default=120, low=1, high=2000)
-                product = self._sanitize_product(query.get("product", [""])[0]) if "product" in query else None
-                rows = _read_history_rows(history_csv, limit, product_id=product)
-                _json_response(self, {"source": "local_csv", "candles": rows})
-                return
-
             if parsed.path == "/api/bootstrap":
                 if self._is_rate_limited():
                     _json_error(self, HTTPStatus.TOO_MANY_REQUESTS, "rate limit exceeded")
                     return
                 query = parse_qs(parsed.query)
                 limit = _parse_int(query, key="limit", default=240, low=1, high=2000)
-                min_local = _parse_int(query, key="min_local", default=20, low=1, high=500)
                 product = self._sanitize_product(query.get("product", ["SOL-USD"])[0])
 
-                cache_key = (product, limit, min_local)
+                cache_key = (product, limit)
                 now = time.time()
                 cached = DashboardHandler._bootstrap_cache.get(cache_key)
                 if cached and now - cached[0] <= 15.0:
                     _json_response(self, cached[1])
-                    return
-
-                local_rows = _read_history_rows(history_csv, limit, product_id=product)
-                if len(local_rows) >= min_local:
-                    payload = {
-                        "source": "local_csv",
-                        "candles": local_rows,
-                        "interval_seconds": 5,
-                        "product": product,
-                    }
-                    DashboardHandler._bootstrap_cache[cache_key] = (now, payload)
-                    _json_response(self, payload)
                     return
 
                 try:
@@ -257,7 +204,7 @@ def _build_handler(web_root: Path, history_csv: Path):
                 except Exception as exc:
                     payload = {
                         "source": "unavailable",
-                        "candles": local_rows,
+                        "candles": [],
                         "interval_seconds": 5,
                         "product": product,
                         "error": str(exc),
@@ -277,12 +224,7 @@ def _build_handler(web_root: Path, history_csv: Path):
                     _json_response(self, payload)
                     return
 
-                payload = {
-                    "source": "local_csv_partial",
-                    "candles": local_rows,
-                    "interval_seconds": 5,
-                    "product": product,
-                }
+                payload = {"source": "unavailable", "candles": [], "interval_seconds": 5, "product": product}
                 DashboardHandler._bootstrap_cache[cache_key] = (now, payload)
                 _json_response(self, payload)
                 return
@@ -327,25 +269,18 @@ def main() -> None:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--web-root", default="web")
-    parser.add_argument(
-        "--history-csv",
-        default="outputs/coinbase_candles_solusd_5s.csv",
-        help="CSV used by /api/history and bootstrap local fallback",
-    )
     args = parser.parse_args()
 
     root = Path(args.web_root).resolve()
     if not root.exists():
         raise SystemExit(f"web root not found: {root}")
 
-    history_csv = Path(args.history_csv).resolve()
-    handler = _build_handler(root, history_csv)
+    handler = _build_handler(root)
     server = ThreadingHTTPServer((args.host, args.port), handler)
     print(f"Serving dashboard: http://{args.host}:{args.port}/live_crypto_dashboard.html")
-    print(f"History API: http://{args.host}:{args.port}/api/history?limit=120 -> {history_csv}")
     print(
         "Bootstrap API: "
-        f"http://{args.host}:{args.port}/api/bootstrap?product=SOL-USD&limit=240&min_local=20"
+        f"http://{args.host}:{args.port}/api/bootstrap?product=SOL-USD&limit=240"
     )
     try:
         server.serve_forever()
