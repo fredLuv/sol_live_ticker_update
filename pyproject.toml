@@ -1,0 +1,15 @@
+[project]
+name = "sol-live-update"
+version = "0.1.0"
+description = "Standalone Coinbase SOL-USD live terminal"
+requires-python = ">=3.11"
+dependencies = [
+  "websockets>=13.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"

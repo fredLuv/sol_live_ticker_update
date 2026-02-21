@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SOL-USD Live Terminal</title>
+  <link rel="stylesheet" href="/assets/live_dashboard.css" />
+</head>
+<body>
+  <main class="shell">
+    <section class="topbar">
+      <div class="brand">
+        <h1>SOL-USD Live Terminal</h1>
+        <div id="status" class="sub">Loading historical context...</div>
+      </div>
+      <div class="kpis">
+        <div class="kpi"><div class="label">5m Range</div><div id="range" class="value">--</div></div>
+        <div class="kpi"><div class="label">5m Volatility</div><div id="volatility" class="value">--</div></div>
+        <div class="kpi"><div class="label">Ticks/min</div><div id="tpm" class="value">--</div></div>
+      </div>
+      <div class="quote">
+        <div id="price" class="px">--</div>
+        <div id="change" class="chg flat">--</div>
+      </div>
+    </section>
+
+    <section class="chart-wrap">
+      <svg id="chart" viewBox="0 0 1040 520" aria-label="SOL USD live candlestick chart"></svg>
+    </section>
+
+    <section class="orderbook-wrap">
+      <div class="ob-top">
+        <div class="ob-title">Level2 Snapshot</div>
+        <div id="ob-status" class="ob-status">Waiting for level2...</div>
+      </div>
+      <div class="ob-kpis">
+        <div class="kpi"><div class="label">Best Bid</div><div id="best-bid" class="value">--</div></div>
+        <div class="kpi"><div class="label">Best Ask</div><div id="best-ask" class="value">--</div></div>
+        <div class="kpi"><div class="label">Spread</div><div id="spread" class="value">--</div></div>
+        <div class="kpi"><div class="label">Bid Imbalance</div><div id="imbalance" class="value">--</div></div>
+      </div>
+      <div class="ob-grid">
+        <div>
+          <div class="ob-side-title bid">Bids (Top 5)</div>
+          <div id="bids-table" class="ob-table"></div>
+        </div>
+        <div>
+          <div class="ob-side-title ask">Asks (Top 5)</div>
+          <div id="asks-table" class="ob-table"></div>
+        </div>
+      </div>
+    </section>
+
+    <div class="foot">
+      <span id="source">Source: bootstrapping...</span>
+      <span id="clock">--</span>
+    </div>
+  </main>
+
+  <script src="/assets/live_dashboard.js" defer></script>
+</body>
+</html>
