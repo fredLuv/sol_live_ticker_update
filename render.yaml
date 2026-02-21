@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: sol-live-ticker-update
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: ./scripts/start_render.sh
+    healthCheckPath: /live_sol_dashboard.html
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: PRODUCT_ID
+        value: SOL-USD
+      - key: CHANNEL
+        value: market_trades
+      - key: CANDLE_SECONDS
+        value: "5"
