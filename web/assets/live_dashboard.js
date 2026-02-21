@@ -6,7 +6,6 @@
     candleMs: 5000,
     maxCandles: 90,
     bootstrapLimit: 240,
-    maxBootstrapAgeSec: 180,
     depthLevels: 10,
     priceDecimals: {
       "SOL-USD": 2,
@@ -162,12 +161,8 @@
         const candles = rows.map((row) => this.parseHistoryRow(row)).filter((row) => row !== null);
         const state = this.getState(product);
 
-        const trimmed = candles.slice(-CONFIG.maxCandles);
-        const newest = trimmed.length ? trimmed[trimmed.length - 1] : null;
-        const newestAgeSec = newest ? Math.floor((Date.now() - newest.start) / 1000) : Number.POSITIVE_INFINITY;
-        const fresh = newestAgeSec <= CONFIG.maxBootstrapAgeSec;
-        state.candles = fresh ? trimmed : [];
-        state.historySource = fresh ? source : `${source} (stale bootstrap ignored)`;
+        state.candles = candles.slice(-CONFIG.maxCandles);
+        state.historySource = source;
       } catch (_err) {
         // fall back to live-only mode
       }
