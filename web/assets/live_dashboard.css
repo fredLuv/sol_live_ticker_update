@@ -74,7 +74,7 @@ body {
   color: #dff0ff;
 }
 .sub { margin-top: 4px; color: var(--muted); font-size: 13px; }
-.kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .kpi {
   background: rgba(255,255,255,0.015);
   border: 1px solid rgba(146, 186, 229, 0.18);
