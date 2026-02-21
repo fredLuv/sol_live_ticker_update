@@ -37,4 +37,4 @@ Open:
 - `src/sol_live_update/` core parser + candle writer
 - `scripts/` runners and local API server
 - `web/` modular dashboard (`html/css/js`)
-- `outputs/` tick/candle csv files
+- `outputs/` candle csv files

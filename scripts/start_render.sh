@@ -11,5 +11,4 @@ exec python scripts/run_live_terminal.py \
   --port "${PORT_VALUE}" \
   --web-root "web" \
   --history-csv "outputs/coinbase_candles_solusd_5s.csv" \
-  --tick-csv "outputs/coinbase_ticks_solusd.csv" \
   --candle-seconds "${CANDLE_SECONDS:-5}"

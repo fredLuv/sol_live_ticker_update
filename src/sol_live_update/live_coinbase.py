@@ -213,25 +213,6 @@ def _parse_ts(value: str) -> datetime:
         return datetime.now(UTC)
 
 
-class CsvTickWriter:
-    def __init__(self, path: Path) -> None:
-        self._path = path
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-
-    def append(self, tick: CoinbaseTick) -> None:
-        write_header = not self._path.exists() or self._path.stat().st_size == 0
-        with self._path.open("a", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f)
-            if write_header:
-                writer.writerow(["ts", "product_id", "price", "size"])
-            writer.writerow([
-                tick.ts.isoformat(),
-                tick.product_id,
-                f"{tick.price:.8f}",
-                "" if tick.size is None else f"{tick.size:.8f}",
-            ])
-
-
 class CsvCandleWriter:
     def __init__(self, path: Path) -> None:
         self._path = path

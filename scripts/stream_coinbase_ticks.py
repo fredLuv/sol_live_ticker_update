@@ -10,7 +10,6 @@ from pathlib import Path
 from sol_live_update import (
     CandleAggregator,
     CsvCandleWriter,
-    CsvTickWriter,
     parse_coinbase_market_message,
 )
 
@@ -36,12 +35,10 @@ def _subscribe_message(product_id: str, channel: str) -> str:
 async def stream_ticks(
     product_id: str,
     channel: str,
-    tick_path: Path,
     candle_path: Path,
     interval_seconds: int,
     ping_interval: int,
 ) -> None:
-    tick_writer = CsvTickWriter(tick_path)
     candle_writer = CsvCandleWriter(candle_path)
     agg = CandleAggregator(interval_seconds=interval_seconds)
 
@@ -62,7 +59,6 @@ async def stream_ticks(
                     for tick in ticks:
                         if tick.product_id != product_id:
                             continue
-                        tick_writer.append(tick)
                         closed = agg.update(tick)
                         if closed is not None:
                             candle_writer.append(closed)
@@ -90,11 +86,6 @@ def main() -> None:
         help="WebSocket channel for price updates (default: market_trades)",
     )
     parser.add_argument(
-        "--tick-output",
-        default="outputs/coinbase_ticks_solusd.csv",
-        help="Output CSV for raw ticks",
-    )
-    parser.add_argument(
         "--candle-output",
         default="outputs/coinbase_candles_solusd_5s.csv",
         help="Output CSV for aggregated candles",
@@ -110,7 +101,6 @@ def main() -> None:
         stream_ticks(
             product_id=args.product,
             channel=args.channel,
-            tick_path=Path(args.tick_output),
             candle_path=Path(args.candle_output),
             interval_seconds=args.candle_seconds,
             ping_interval=args.ping_interval,

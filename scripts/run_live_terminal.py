@@ -39,7 +39,6 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--web-root", default="web")
     parser.add_argument("--history-csv", default="outputs/coinbase_candles_solusd_5s.csv")
-    parser.add_argument("--tick-csv", default="outputs/coinbase_ticks_solusd.csv")
     parser.add_argument("--candle-seconds", type=int, default=5)
     parser.add_argument(
         "--channel",
@@ -62,8 +61,6 @@ def main() -> None:
         args.product,
         "--channel",
         args.channel,
-        "--tick-output",
-        args.tick_csv,
         "--candle-output",
         args.history_csv,
         "--candle-seconds",
