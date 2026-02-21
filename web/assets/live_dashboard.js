@@ -1,12 +1,17 @@
 (() => {
   const CONFIG = {
     wsUrl: "wss://advanced-trade-ws.coinbase.com",
-    products: ["SOL-USD", "BTC-USD"],
+    products: ["SOL-USD", "BTC-USD", "SOL-BTC"],
     defaultProduct: "SOL-USD",
     candleMs: 5000,
     maxCandles: 90,
     bootstrapLimit: 240,
     depthLevels: 10,
+    priceDecimals: {
+      "SOL-USD": 2,
+      "BTC-USD": 2,
+      "SOL-BTC": 6,
+    },
   };
 
   class LiveDashboard {
@@ -101,7 +106,7 @@
     refreshDisplay() {
       const state = this.getState();
       if (state.lastPrice !== null) {
-        this.priceEl.textContent = `$${this.fmtPrice(state.lastPrice)}`;
+        this.priceEl.textContent = this.fmtQuotePrice(state.lastPrice, this.activeProduct);
         this.updateChange(state.lastPrice);
       } else {
         this.priceEl.textContent = "--";
@@ -422,7 +427,7 @@
       state.lastUpdateTs = tsMs;
 
       if (product === this.activeProduct) {
-        this.priceEl.textContent = `$${this.fmtPrice(price)}`;
+        this.priceEl.textContent = this.fmtQuotePrice(price, product);
         this.clockEl.textContent = `Updated ${this.nowClock(tsMs)}`;
         this.updateChange(price);
         this.updateStats();
@@ -584,7 +589,14 @@
     }
 
     fmtPrice(v) {
-      return Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const digits = CONFIG.priceDecimals[this.activeProduct] ?? 2;
+      return Number(v).toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits });
+    }
+
+    fmtQuotePrice(v, product) {
+      const digits = CONFIG.priceDecimals[product] ?? 2;
+      const prefix = product.endsWith("-USD") ? "$" : "";
+      return `${prefix}${Number(v).toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
     }
 
     fmtPct(v) {
