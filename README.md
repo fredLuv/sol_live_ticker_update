@@ -5,6 +5,10 @@ Standalone SOL-USD live terminal app (Coinbase):
 - `level2` for top-of-book + spread/imbalance panel
 - local bootstrap fallback (`CSV -> Coinbase REST -> live websocket`)
 
+## Preview
+
+![SOL Live Terminal](web/assets/sol_live_terminal.png)
+
 ## Setup
 
 ```bash
