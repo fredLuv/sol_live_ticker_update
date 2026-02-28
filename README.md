@@ -5,7 +5,7 @@ Standalone multi-market live terminal app (Coinbase):
 - live candlestick updates from Coinbase `market_trades`
 - top-of-book + spread/imbalance from Coinbase `level2`
 - REST bootstrap for recent candles + order book hydration
-
+Live in https://sol-live-ticker-update.onrender.com/
 ## Preview
 
 ![SOL Live Terminal](web/assets/sol_live_terminal.png)
